@@ -3,14 +3,60 @@ from kafka import KafkaProducer
 import json
 import time
 from datetime import datetime
+from faker import Faker
+import random
+
+ENTITIES = [
+    "Japan",
+    "Germany",
+    "United States",
+    "United Kingdom",
+    "France",
+    "Italy",
+]
+
+FISH_SCIENTIFIC = [
+    "Thunnus albacares",
+    "Thunnus obesus",
+    "Thunnus alalunga",
+    "Thunnus thynnus",
+    "Xiphias gladius"
+]
+
+SECTORS = [
+    "Industrial",
+    "Artisanal",
+    "Recreational",
+    "Subsistence",
+]
+
+CATCH_SUMS = [1000, 2000, 3000, 4000, 5000]
+REAL_SUMS = [0.5, 1000,300,700, 32, 100, 21]
+
+MIN_EVENTS = 500
+fake = Faker()
+
+def generate_random_record():
+    record = {
+        "year": int(fake.year()),
+        "scientific_name": fake.random.choice(FISH_SCIENTIFIC),
+        "entity": fake.random.choice(ENTITIES),
+        "sector": fake.random.choice(SECTORS),
+        "catch_sum": fake.random.choice(CATCH_SUMS),
+        "real_value": fake.random.choice(REAL_SUMS),
+        "timestamp": datetime.now().isoformat(),
+    }
+    return record
 
 
 def create_producer(bootstrap_servers: str = "localhost:9092"):
     return KafkaProducer(
         bootstrap_servers=bootstrap_servers,
+        api_version=(3, 5, 0),
         compression_type="lz4",
         key_serializer=lambda k: k.encode("utf-8") if k else None,
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+        request_timeout_ms=30000,
     )
 
 total_sent = 0
@@ -27,45 +73,28 @@ def on_error(excp):
 
 
 def send_records(topic: str = "fishing_records", run_length: int = 20):
-    from pyspark.sql import SparkSession
-
-    spark = (
-        SparkSession.builder.appName("FishingProducer").master("local[*]").getOrCreate()
-    )
-
-    file_path = "data/rfmo_12.csv"
-    df = spark.read.csv(file_path, header=True, inferSchema=True)
-
-    # Convert DataFrame rows to a list of dictionaries
-    # .collect() brings the data into Python memory as Row objects
-    # .asDict() converts those Row objects to dictionaries
-    records = [row.asDict() for row in df.collect()]
-
     producer = create_producer()
     start_time = time.perf_counter()
 
-    print(f"Starting stream of {len(records)} rows to Kafka topic '{topic}' for up to {run_length} seconds")
+    print(f"sending fake records to topic '{topic}' for {run_length} seconds...")
 
     try:
-        for record in records:
-            # Check if we've exceeded our run_length
+        for i in range(MIN_EVENTS):
             if time.perf_counter() - start_time > run_length:
                 break
 
-            # Send the actual row from the CSV
+            record = generate_random_record()
             producer.send(topic=topic, value=record).add_callback(
                 on_success
             ).add_errback(on_error)
 
-            print(
-                f"Sent row: {list(record.values())[10:15]}..."
-            ) 
-
+            print(f"Sent record: {record}")
+            time.sleep(0.1)
+            
     except KeyboardInterrupt:
-        pass
+        print("stopping producer due to keyboard interrupt")
     finally:
         producer.flush()
-        spark.stop()  # Clean up Spark
 
 
 def main():
