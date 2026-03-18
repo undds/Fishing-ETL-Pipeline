@@ -3,3 +3,5 @@
 rfmo_12.csv
 \data
 /data/*
+/.venv
+/checkpoints
