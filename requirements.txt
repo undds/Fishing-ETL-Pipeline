@@ -1,0 +1,8 @@
+lz4
+kafka-python-ng
+collections
+pyspark
+faker
+datetime
+json
+time
