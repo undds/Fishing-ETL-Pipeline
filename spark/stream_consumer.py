@@ -1,6 +1,6 @@
 import pyspark
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
+from pyspark.sql.functions import from_json, col, to_date, to_timestamp
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -8,6 +8,23 @@ from pyspark.sql.types import (
     DoubleType,
     IntegerType,
 )
+
+
+def process_batch(batch_df, batch_id):
+    """This function runs every 10 seconds for each new micro-batch"""
+    print(f"Processing Batch ID: {batch_id}")
+
+    # Action 1: Show in Console (so you can see it's working)
+    batch_df.show(truncate=False)
+
+    # Action 2: Write to Parquet (Persistence)
+    # Note: Use .write (batch) instead of .writeStream inside here
+    (
+        batch_df.write.format("parquet")
+        .mode("append")
+        .partitionBy("processing_date")
+        .save("data/output/raw_fishing_data")
+    )
 
 
 def main():
@@ -27,21 +44,13 @@ def main():
 
     schema = StructType(
         [
-            StructField("rfmo_id", IntegerType(), True),
-            StructField("rfmo_name", StringType(), True),
-            StructField("layer_name", StringType(), True),
             StructField("year", IntegerType(), True),
             StructField("scientific_name", StringType(), True),
-            StructField("common_name", StringType(), True),
-            StructField("functional_group", StringType(), True),
-            StructField("commercial_group", StringType(), True),
-            StructField("fishing_entity", StringType(), True),
-            StructField("sector_type", StringType(), True),
-            StructField("catch_status", StringType(), True),
-            StructField("reporting_status", StringType(), True),
-            StructField("gear_name", StringType(), True),
+            StructField("entity", StringType(), True),
+            StructField("sector", StringType(), True),
             StructField("catch_sum", DoubleType(), True),
             StructField("real_value", DoubleType(), True),
+            StructField("timestamp", StringType(), True),
         ]
     )
 
@@ -59,13 +68,16 @@ def main():
         df.selectExpr("CAST(value AS STRING)")
         .select(from_json(col("value"), schema).alias("data"))
         .select("data.*")
+        .withColumn("ts", to_timestamp(col("timestamp")))  # Convert string to TS
+        .withColumn("processing_date", to_date(col("ts")))  # Extract Date
     )
 
-    # Output to console
+    # Output to paraquet sink
     query = (
-        structured_df.writeStream.outputMode("append")
-        .format("console")
-        .option("truncate", "false")
+        structured_df.writeStream.foreachBatch(
+            process_batch
+        ) 
+        .trigger(processingTime="10 seconds")
         .start()
     )
 

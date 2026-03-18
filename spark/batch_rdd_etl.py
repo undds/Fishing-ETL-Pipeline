@@ -14,33 +14,19 @@ spark = SparkSession.builder \
 sc = spark.sparkContext
 
 # Load raw parquet
-df = spark.read.parquet("data/raw/orders")
+df = spark.read.parquet("data/output/raw_fishing_data")
+df.printSchema()
 
 rdd = df.rdd
 
-# -----------------------------------
-# Filter out CANCELLED events
-# (use catch_status as event type)
-# -----------------------------------
-valid_records = rdd.filter(lambda row: row.catch_status != "Discards")
+scientific_revenue = rdd.map(
+    lambda row: (row.scientific_name, float(row.real_value) if row.real_value else 0.0)
+).reduceByKey(lambda a, b: a + b)
 
-# -----------------------------------
-# Revenue per gear_name (product)
-# -----------------------------------
-gear_revenue = valid_records \
-    .map(lambda row: (row.gear_name, float(row.real_value))) \
-    .reduceByKey(lambda a,b: a+b)
+top_scientific = scientific_revenue.takeOrdered(10, key=lambda x: -x[1])
 
-# -----------------------------------
-# Top selling gear
-# -----------------------------------
-top_gear = gear_revenue.takeOrdered(10, key=lambda x: -x[1])
+for scientific_name, revenue in top_scientific:
+    print(f"{scientific_name}: ${revenue:.2f}")
 
-print("Top Gear Revenue:")
-for g in top_gear:
-    print(g)
 
-# -----------------------------------
-# Save output
-# -----------------------------------
-gear_revenue.saveAsTextFile("data/output/rdd_gear_revenue")
+scientific_revenue.saveAsTextFile("data/output/rdd_scientific_revenue")
