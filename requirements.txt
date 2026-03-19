@@ -2,6 +2,4 @@ lz4
 kafka-python-ng
 pyspark
 faker
-datetime
-json
-time
+apache-airflow

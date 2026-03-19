@@ -4,6 +4,11 @@ import time
 from datetime import datetime
 from faker import Faker
 import random
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--bootstrap-servers", default="localhost:9092")
+args, _ = parser.parse_known_args()
 
 ENTITIES = [
     "Japan",
@@ -48,13 +53,13 @@ def generate_random_record():
 
 def create_producer(bootstrap_servers: str = "localhost:9092"):
     return KafkaProducer(
-        bootstrap_servers=bootstrap_servers,
+        bootstrap_servers=args.bootstrap_servers,
         api_version=(3, 5, 0),
         compression_type="lz4",
         key_serializer=lambda k: k.encode("utf-8") if k else None,
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         request_timeout_ms=30000,
-        retries=5
+        retries=5,
     )
 
 total_sent = 0

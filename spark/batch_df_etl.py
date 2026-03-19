@@ -20,7 +20,7 @@ def main():
     spark = SparkSession.builder.appName("FishingBatchETL").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
-    df = spark.read.parquet("data/output/raw_fishing_data")
+    df = spark.read.parquet("/opt/project/data/output/raw_fishing_data")
 
     df = df.fillna({"real_value": 0.0})
     df = df.withColumn("ts", to_timestamp(col("timestamp")))
