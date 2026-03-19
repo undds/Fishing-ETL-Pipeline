@@ -1,0 +1,13 @@
+----------------------------------------------------------------
+Wed Mar 18 15:45:44 EDT 2026:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.16.1.1 - (1901046): instance a816c00e-019d-027b-8d8e-000004cc6728 
+on database directory /Users/muhibullahhotak/Desktop/Fishing-ETL-Pipeline/metastore_db with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@251a69d7 
+Loaded from file:/opt/spark/jars/derby-10.16.1.1.jar
+java.vendor=Eclipse Adoptium
+java.runtime.version=17.0.2+8
+user.dir=/Users/muhibullahhotak/Desktop/Fishing-ETL-Pipeline
+os.name=Mac OS X
+os.arch=x86_64
+os.version=15.7.4
+derby.system.home=null
+Database Class Loader started - derby.database.classpath=''

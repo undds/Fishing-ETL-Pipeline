@@ -7,26 +7,27 @@ Save the result as a text file.
 """
 from pyspark.sql import SparkSession
 
-spark = SparkSession.builder \
-    .appName("FishingRDD_ETL") \
-    .getOrCreate()
-
+spark = SparkSession.builder.appName("FishingRDD_ETL").getOrCreate()
 sc = spark.sparkContext
 
-# Load raw parquet
 df = spark.read.parquet("data/output/raw_fishing_data")
+
 df.printSchema()
 
 rdd = df.rdd
 
-scientific_revenue = rdd.map(
-    lambda row: (row.scientific_name, float(row.real_value) if row.real_value else 0.0)
-).reduceByKey(lambda a, b: a + b)
+scientific_revenue = (
+    rdd.map(lambda row: (
+        row.scientific_name,
+        float(row.real_value) if row.real_value else 0.0
+    ))
+    .reduceByKey(lambda a, b: a + b)
+)
 
 top_scientific = scientific_revenue.takeOrdered(10, key=lambda x: -x[1])
 
-for scientific_name, revenue in top_scientific:
-    print(f"{scientific_name}: ${revenue:.2f}")
-
+print("\n=== Top Scientific Names by Revenue ===")
+for name, revenue in top_scientific:
+    print(f"{name}: ${revenue:.2f}")
 
 scientific_revenue.saveAsTextFile("data/output/rdd_scientific_revenue")

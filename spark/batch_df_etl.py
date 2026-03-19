@@ -10,34 +10,87 @@ Write each output to Parquet, partitioned and bucketed where appropriate.
 Use caching on the base DataFrame to speed up multiple downstream transformations.
 
 """
-
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, sum, avg, count, hour, to_timestamp, row_number, broadcast
+)
+from pyspark.sql.window import Window
 
-spark = SparkSession.builder.appName("LoadCSV").getOrCreate()
-file_path = "data/rfmo_12.csv"
-df = spark.read.csv(file_path, header=True, inferSchema=True)
+def main():
+    spark = SparkSession.builder.appName("FishingBatchETL").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
 
-# group by year, sector_type, and common_name, and catch_sum
-yearly_summary = df.groupBy("year", "sector_type", "common_name").sum("catch_sum")
-yearly_summary.show()
+    df = spark.read.parquet("data/output/raw_fishing_data")
 
-# show top 10 products by real_value
-top10_summary = df.groupBy("common_name").sum("real_value").orderBy("sum(real_value)", ascending=False).limit(10)
-top10_summary.show()
+    df = df.fillna({"real_value": 0.0})
+    df = df.withColumn("ts", to_timestamp(col("timestamp")))
 
-# ordered by fishing_entity and year, and sum of real_value
-regional_revenue = df.groupBy("fishing_entity", "year").sum("real_value").orderBy("fishing_entity", "year")
-regional_revenue.show()
+    df.cache()
 
-# count reporting_status
-reporting_status_breakdown = df.groupBy("reporting_status").count()
-reporting_status_breakdown.show()
+    # Hourly Summary
+    hourly_summary = (
+        df.withColumn("hour", hour(col("ts")))
+        .groupBy("hour")
+        .agg(
+            count("*").alias("total_records"),
+            sum("real_value").alias("total_revenue"),
+            avg("real_value").alias("avg_value")
+        )
+    )
 
+    print("\n=== Hourly Summary ===")
+    hourly_summary.show()
 
+    # Top Products per Entity
+    window_spec = Window.partitionBy("entity").orderBy(col("total_value").desc())
 
+    top_products = (
+        df.groupBy("entity", "scientific_name")
+        .agg(sum("real_value").alias("total_value"))
+        .withColumn("rank", row_number().over(window_spec))
+        .filter(col("rank") <= 10)
+    )
 
-df.show()
+    print("\n=== Top Products per Entity ===")
+    top_products.show()
 
-df.printSchema()
+    # Regions CSV
+    regions_df = spark.read.csv(
+        "data/regions.csv", header=True, inferSchema=True
+    )
 
+    regions_df = broadcast(regions_df)
 
+    enriched_df = df.join(regions_df, on="entity", how="left")
+
+    regional_revenue = (
+        enriched_df.groupBy("region")
+        .agg(sum("real_value").alias("total_revenue"))
+        .orderBy(col("total_revenue").desc())
+    )
+
+    print("\n=== Regional Revenue ===")
+    regional_revenue.show()
+
+    # Sector Breakdown
+    sector_breakdown = (
+        df.groupBy("entity")
+        .pivot("sector")
+        .count()
+    )
+
+    print("\n=== Sector Breakdown ===")
+    sector_breakdown.show()
+
+    # Write outputs
+    hourly_summary.write.mode("overwrite").partitionBy("hour").parquet("data/output/hourly_summary")
+    top_products.write.mode("overwrite").parquet("data/output/top_products")
+    regional_revenue.write.mode("overwrite").parquet("data/output/regional_revenue_by_region")
+    sector_breakdown.write.mode("overwrite").parquet("data/output/sector_breakdown")
+
+    print("\nBatch ETL Completed Successfully")
+
+    spark.stop()
+
+if __name__ == "__main__":
+    main()
