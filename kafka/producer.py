@@ -4,7 +4,6 @@ import json
 import time
 from datetime import datetime
 from faker import Faker
-import random
 
 ENTITIES = [
     "Japan",
@@ -90,7 +89,7 @@ def send_records(topic: str = "fishing_records", run_length: int = 20):
 
             print(f"Sent record: {record}")
             time.sleep(0.1)
-            
+
     except KeyboardInterrupt:
         print("stopping producer due to keyboard interrupt")
     finally:
