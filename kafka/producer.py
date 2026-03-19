@@ -3,6 +3,7 @@ import json
 import time
 from datetime import datetime
 from faker import Faker
+import random
 
 ENTITIES = [
     "Japan",
