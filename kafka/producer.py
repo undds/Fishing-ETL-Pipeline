@@ -1,4 +1,3 @@
-# module 1
 from kafka import KafkaProducer
 import json
 import time
@@ -31,23 +30,21 @@ SECTORS = [
 ]
 
 CATCH_SUMS = [1000, 2000, 3000, 4000, 5000]
-REAL_SUMS = [0.5, 1000,300,700, 32, 100, 21]
+REAL_SUMS = [0.5, 1000, 300, 700, 32, 100, 21]
 
 MIN_EVENTS = 500
 fake = Faker()
 
 def generate_random_record():
-    record = {
+    return {
         "year": int(fake.year()),
-        "scientific_name": fake.random.choice(FISH_SCIENTIFIC),
-        "entity": fake.random.choice(ENTITIES),
-        "sector": fake.random.choice(SECTORS),
-        "catch_sum": fake.random.choice(CATCH_SUMS),
-        "real_value": fake.random.choice(REAL_SUMS),
+        "scientific_name": random.choice(FISH_SCIENTIFIC),
+        "entity": random.choice(ENTITIES),
+        "sector": random.choice(SECTORS),
+        "catch_sum": float(random.choice(CATCH_SUMS)),  # ensure double
+        "real_value": float(random.choice(REAL_SUMS)),
         "timestamp": datetime.now().isoformat(),
     }
-    return record
-
 
 def create_producer(bootstrap_servers: str = "localhost:9092"):
     return KafkaProducer(
@@ -57,6 +54,7 @@ def create_producer(bootstrap_servers: str = "localhost:9092"):
         key_serializer=lambda k: k.encode("utf-8") if k else None,
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         request_timeout_ms=30000,
+        retries=5
     )
 
 total_sent = 0
@@ -64,46 +62,42 @@ total_sent = 0
 def on_success(record_metadata):
     global total_sent
     total_sent += 1
-    if total_sent % 1000 == 0:
-        print(f"Successfully sent {total_sent} records to {record_metadata.topic}")
-
+    if total_sent % 100 == 0:
+        print(f"✅ Sent {total_sent} records to {record_metadata.topic}")
 
 def on_error(excp):
     print(f"Failed to send record: {excp}")
 
-
-def send_records(topic: str = "fishing_records", run_length: int = 20):
+def send_records(topic: str = "fishing_records", run_length: int = 30):
     producer = create_producer()
     start_time = time.perf_counter()
 
-    print(f"sending fake records to topic '{topic}' for {run_length} seconds...")
+    print(f"Sending records to topic '{topic}' for {run_length} seconds...")
 
     try:
-        for i in range(MIN_EVENTS):
+        for _ in range(MIN_EVENTS):
             if time.perf_counter() - start_time > run_length:
                 break
 
             record = generate_random_record()
-            producer.send(topic=topic, value=record).add_callback(
-                on_success
-            ).add_errback(on_error)
 
-            print(f"Sent record: {record}")
+            producer.send(topic=topic, value=record) \
+                .add_callback(on_success) \
+                .add_errback(on_error)
+
+            print(f"Sent: {record}")
             time.sleep(0.1)
-            
+
     except KeyboardInterrupt:
-        print("stopping producer due to keyboard interrupt")
+        print("Stopping producer")
     finally:
         producer.flush()
 
-
 def main():
-    # Call the actual logic function, not just the producer creator
-    print("Starting producer")
-    send_records(topic="fishing_records", run_length=30)
-    print("Finished")
-    print(f"Total records sent: {total_sent}")
-
+    print("Starting Kafka Producer")
+    time.sleep(5)  # allow Kafka to be ready
+    send_records()
+    print(f"Finished. Total records sent: {total_sent}")
 
 if __name__ == "__main__":
     main()

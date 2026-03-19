@@ -10,45 +10,24 @@ Write each output to Parquet, partitioned and bucketed where appropriate.
 Use caching on the base DataFrame to speed up multiple downstream transformations.
 
 """
-
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    col,
-    sum,
-    avg,
-    count,
-    hour,
-    to_timestamp,
-    row_number,
-    broadcast
+    col, sum, avg, count, hour, to_timestamp, row_number, broadcast
 )
 from pyspark.sql.window import Window
 
-
 def main():
-    spark = SparkSession.builder \
-        .appName("FishingBatchETL") \
-        .getOrCreate()
-
+    spark = SparkSession.builder.appName("FishingBatchETL").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
-    # -----------------------------------
-    # Load Data (Streaming Output)
-    # -----------------------------------
     df = spark.read.parquet("data/output/raw_fishing_data")
 
-    # Handle nulls
     df = df.fillna({"real_value": 0.0})
-
-    # Convert timestamp
     df = df.withColumn("ts", to_timestamp(col("timestamp")))
 
-    # Cache base DataFrame
     df.cache()
 
-    # -----------------------------------
-    # 1. Hourly Summary
-    # -----------------------------------
+    # Hourly Summary
     hourly_summary = (
         df.withColumn("hour", hour(col("ts")))
         .groupBy("hour")
@@ -60,12 +39,9 @@ def main():
     )
 
     print("\n=== Hourly Summary ===")
-    hourly_summary.show(truncate=False)
+    hourly_summary.show()
 
-    # -----------------------------------
-    # 2. Top 10 Products (Window Function)
-    # (Partitioned to avoid Spark warning)
-    # -----------------------------------
+    # Top Products per Entity
     window_spec = Window.partitionBy("entity").orderBy(col("total_value").desc())
 
     top_products = (
@@ -76,42 +52,27 @@ def main():
     )
 
     print("\n=== Top Products per Entity ===")
-    top_products.show(truncate=False)
+    top_products.show()
 
-    # -----------------------------------
-    # 3. Regional Revenue (WITH CSV JOIN)
-    # -----------------------------------
-
-    # Load regions lookup table
+    # Regions CSV
     regions_df = spark.read.csv(
-        "data/regions.csv",
-        header=True,
-        inferSchema=True
+        "data/regions.csv", header=True, inferSchema=True
     )
 
-    # Broadcast (small dataset optimization)
     regions_df = broadcast(regions_df)
 
-    # Join with main dataset
-    enriched_df = df.join(
-        regions_df,
-        on="entity",
-        how="left"
-    )
+    enriched_df = df.join(regions_df, on="entity", how="left")
 
-    # Aggregate by region
     regional_revenue = (
         enriched_df.groupBy("region")
         .agg(sum("real_value").alias("total_revenue"))
         .orderBy(col("total_revenue").desc())
     )
 
-    print("\n=== Regional Revenue by Region ===")
-    regional_revenue.show(truncate=False)
+    print("\n=== Regional Revenue ===")
+    regional_revenue.show()
 
-    # -----------------------------------
-    # 4. Sector Breakdown (Pivot)
-    # -----------------------------------
+    # Sector Breakdown
     sector_breakdown = (
         df.groupBy("entity")
         .pivot("sector")
@@ -119,33 +80,17 @@ def main():
     )
 
     print("\n=== Sector Breakdown ===")
-    sector_breakdown.show(truncate=False)
+    sector_breakdown.show()
 
-    # -----------------------------------
-    # Write Outputs
-    # -----------------------------------
+    # Write outputs
+    hourly_summary.write.mode("overwrite").partitionBy("hour").parquet("data/output/hourly_summary")
+    top_products.write.mode("overwrite").parquet("data/output/top_products")
+    regional_revenue.write.mode("overwrite").parquet("data/output/regional_revenue_by_region")
+    sector_breakdown.write.mode("overwrite").parquet("data/output/sector_breakdown")
 
-    hourly_summary.write \
-        .mode("overwrite") \
-        .partitionBy("hour") \
-        .parquet("data/output/hourly_summary")
-
-    top_products.write \
-        .mode("overwrite") \
-        .parquet("data/output/top_products")
-
-    regional_revenue.write \
-        .mode("overwrite") \
-        .parquet("data/output/regional_revenue_by_region")
-
-    sector_breakdown.write \
-        .mode("overwrite") \
-        .parquet("data/output/sector_breakdown")
-
-    print("\n✅ Batch ETL Job Completed Successfully")
+    print("\nBatch ETL Completed Successfully")
 
     spark.stop()
-
 
 if __name__ == "__main__":
     main()
