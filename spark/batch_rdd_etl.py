@@ -10,7 +10,7 @@ from pyspark.sql import SparkSession
 spark = SparkSession.builder.appName("FishingRDD_ETL").getOrCreate()
 sc = spark.sparkContext
 
-df = spark.read.parquet("data/output/raw_fishing_data")
+df = spark.read.parquet("/opt/project/data/output/raw_fishing_data")
 
 df.printSchema()
 

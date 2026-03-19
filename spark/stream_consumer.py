@@ -4,6 +4,14 @@ from pyspark.sql.functions import from_json, col, to_date, to_timestamp
 from pyspark.sql.types import (
     StructType, StructField, StringType, DoubleType, IntegerType
 )
+import sys
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--bootstrap-servers", default="localhost:9092")
+parser.add_argument("--duration", type=int, default=60)
+args, unknown = parser.parse_known_args()
+
 
 def process_batch(batch_df, batch_id):
     print(f"\Processing Batch ID: {batch_id}")
@@ -45,7 +53,7 @@ def main():
 
     df = (
         spark.readStream.format("kafka")
-        .option("kafka.bootstrap.servers", "localhost:9092")
+        .option("kafka.bootstrap.servers", args.bootstrap_servers)
         .option("subscribe", "fishing_records")
         .option("startingOffsets", "earliest")
         .load()
@@ -66,7 +74,15 @@ def main():
         .start()
     )
 
-    query.awaitTermination()
+    # 3. Use the timeout parameter in awaitTermination
+    # This tells Spark: "Run for X seconds, then stop and exit the script"
+    print(f"⏳ Stream will run for {args.duration} seconds...")
+    query.awaitTermination(timeout=args.duration)
+
+    # 4. Explicitly stop the query and session to signal "Success" to Airflow
+    query.stop()
+    spark.stop()
+    print("✅ Stream finished successfully. Exiting...")
 
 if __name__ == "__main__":
     main()
