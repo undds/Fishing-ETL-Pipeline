@@ -14,18 +14,17 @@ args, unknown = parser.parse_known_args()
 
 
 def process_batch(batch_df, batch_id):
-    print(f"\Processing Batch ID: {batch_id}")
+    # 1. Use the ABSOLUTE path so Docker/Airflow can find it
+    output_path = "/opt/project/data/output/raw_fishing_data"
 
-    batch_df.show(truncate=False)
+    print(f"📦 Processing batch {batch_id}...")
 
-    if batch_df.count() > 0:
-        (
-            batch_df.write
-            .format("parquet")
-            .mode("append")
-            .partitionBy("processing_date")
-            .save("data/output/raw_fishing_data")
-        )
+    # 2. Write the batch to Parquet
+    batch_df.write.mode("append").parquet(output_path)
+
+    # 3. (Optional) Helpful for debugging - see if data is actually coming in
+    batch_df.show(5)
+
 
 def main():
     spark_ver = pyspark.__version__
@@ -59,18 +58,16 @@ def main():
         .load()
     )
 
-    structured_df = (
-        df.selectExpr("CAST(value AS STRING)")
-        .select(from_json(col("value"), schema).alias("data"))
-        .select("data.*")
-        .withColumn("ts", to_timestamp(col("timestamp")))
-        .withColumn("processing_date", to_date(col("ts")))
+    parsed_df = (
+        df.selectExpr("CAST(value AS STRING)")  # Convert binary to string
+        .select(from_json(col("value"), schema).alias("data"))  # Parse JSON
+        .select("data.*")  # Flatten the columns
     )
 
     query = (
-        structured_df.writeStream
-        .foreachBatch(process_batch)
-        .trigger(processingTime="10 seconds")
+        parsed_df.writeStream.format("parquet")
+        .option("path", "/opt/project/data/output/raw_fishing_data")
+        .option("checkpointLocation", "/opt/project/data/checkpoint/raw_fishing")
         .start()
     )
 
