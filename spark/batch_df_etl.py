@@ -27,6 +27,18 @@ def main():
 
     df.cache()
 
+    negative_values_df = df.filter(col("real_value") < 0)
+
+    # Get the count for logging purposes
+    neg_count = negative_values_df.count()
+    print(f"\n=== Quality Check ===")
+    print(f"Number of rows with negative 'real_value': {neg_count}")
+
+    # Write the negative records to Parquet for investigation
+    negative_values_df.write.mode("overwrite").parquet(
+        "data/output/negative_values_report"
+    )
+
     # Hourly Summary
     hourly_summary = (
         df.withColumn("hour", hour(col("ts")))
@@ -54,24 +66,6 @@ def main():
     print("\n=== Top Products per Entity ===")
     top_products.show()
 
-    # Regions CSV
-    regions_df = spark.read.csv(
-        "data/regions.csv", header=True, inferSchema=True
-    )
-
-    regions_df = broadcast(regions_df)
-
-    enriched_df = df.join(regions_df, on="entity", how="left")
-
-    regional_revenue = (
-        enriched_df.groupBy("region")
-        .agg(sum("real_value").alias("total_revenue"))
-        .orderBy(col("total_revenue").desc())
-    )
-
-    print("\n=== Regional Revenue ===")
-    regional_revenue.show()
-
     # Sector Breakdown
     sector_breakdown = (
         df.groupBy("entity")
@@ -85,7 +79,6 @@ def main():
     # Write outputs
     hourly_summary.write.mode("overwrite").partitionBy("hour").parquet("data/output/hourly_summary")
     top_products.write.mode("overwrite").parquet("data/output/top_products")
-    regional_revenue.write.mode("overwrite").parquet("data/output/regional_revenue_by_region")
     sector_breakdown.write.mode("overwrite").parquet("data/output/sector_breakdown")
 
     print("\nBatch ETL Completed Successfully")
