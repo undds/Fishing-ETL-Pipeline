@@ -36,18 +36,19 @@ SECTORS = [
 
 CATCH_SUMS = [1000, 2000, 3000, 4000, 5000]
 REAL_SUMS = [0.5, 1000, 300, 700, 32, 100, 21, -1]
-
 MIN_EVENTS = 500
+
+
 fake = Faker()
 
 def generate_random_record():
     return {
         "year": int(fake.year()),
-        "scientific_name": random.choice(FISH_SCIENTIFIC),
-        "entity": random.choice(ENTITIES),
-        "sector": random.choice(SECTORS),
-        "catch_sum": float(random.choice(CATCH_SUMS)),  # ensure double
-        "real_value": float(random.choice(REAL_SUMS)),
+        "scientific_name": fake.random.choice(FISH_SCIENTIFIC),
+        "entity": fake.random.choice(ENTITIES),
+        "sector": fake.random.choice(SECTORS),
+        "catch_sum": float(fake.random.choice(CATCH_SUMS)),
+        "real_value": float(fake.random.choice(REAL_SUMS)),
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -68,7 +69,7 @@ def on_success(record_metadata):
     global total_sent
     total_sent += 1
     if total_sent % 100 == 0:
-        print(f"✅ Sent {total_sent} records to {record_metadata.topic}")
+        print(f"Sent {total_sent} records to {record_metadata.topic}")
 
 def on_error(excp):
     print(f"Failed to send record: {excp}")
@@ -91,7 +92,7 @@ def send_records(topic: str = "fishing_records", run_length: int = 30):
                 .add_errback(on_error)
 
             print(f"Sent: {record}")
-            time.sleep(0.1)
+            time.sleep(0.05)
 
     except KeyboardInterrupt:
         print("Stopping producer")

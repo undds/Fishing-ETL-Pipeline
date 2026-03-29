@@ -3,7 +3,6 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.bash import BashOperator
 from datetime import datetime, timedelta
 
-# Default arguments for the DAG
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
@@ -23,15 +22,15 @@ with DAG(
 
     start = EmptyOperator(task_id="start")
 
-    # STEP 3: Generate data into Kafka
+    # Generates our data and sends to Kafka topic "fishing_records"
     produce_events = BashOperator(
         task_id="produce_order_events",
         bash_command="python /opt/project/kafka/producer.py --bootstrap-servers kafka:29092 --num-events 500",
     )
 
-    # STEP 4: Consume stream and write raw Parquet (Using internal Kafka:29092)
-    run_streaming_consumer = BashOperator(
-        task_id="run_streaming_consumer",
+    # Updated Bronze Task (Streaming from Kafka)
+    run_bronze_stream = BashOperator(
+        task_id="run_bronze_stream",
         bash_command=(
             "spark-submit "
             "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 "
@@ -40,25 +39,18 @@ with DAG(
         ),
     )
 
-    # STEP 5: RDD-based Batch ETL (Using /opt/project path)
-    run_batch_rdd_etl = BashOperator(
-        task_id="run_batch_rdd_etl",
-        bash_command="spark-submit /opt/project/spark/batch_rdd_etl.py",
-    )
-
-    # STEP 6: DataFrame-based Batch ETL (Using /opt/project path)
-    run_batch_df_etl = BashOperator(
-        task_id="run_batch_df_etl",
+    # Updated Gold Task (Aggregates)
+    run_silver_gold_batch = BashOperator(
+        task_id="run_silver_gold_batch",
         bash_command="spark-submit /opt/project/spark/batch_df_etl.py",
     )
 
     end = EmptyOperator(task_id="end")
 
-    # --- DAG Structure ---
     (
         start
         >> produce_events
-        >> run_streaming_consumer
-        >> [run_batch_rdd_etl, run_batch_df_etl]
+        >> run_bronze_stream
+        >> run_silver_gold_batch
         >> end
     )
