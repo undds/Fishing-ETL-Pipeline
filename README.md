@@ -1,9 +1,5 @@
-# Fishing-ETL-Pipeline
+Build with this:
 
-This project will be worked by Frank and Hotak
-we are using faker api to generate fake data
-Instruction for running the project
-Installed the required libraries which is written down on requirements.txt
-Install docker on your system
-use the following command while in the code folder: docker compose up
-To turn the docker off use: docker compose down
+docker compose up -d --build
+
+go into airflow at localhost:8080 and trigger a manual dag. u should see the data written into the bronze/silver/gold folders.
